@@ -9,8 +9,8 @@ def main():
     k = int(argv[2])
 
     G = loadGraph(graph_file)
-    print(f"Graph: {G}")  # vertex 0 is not used
-    print(f"Edges: {edgeList(G)}")
+    # print(f"Graph: {G}")  # vertex 0 is not used
+    # print(f"Edges: {edgeList(G)}")
 
     solution = brute_force(G, k)
 
