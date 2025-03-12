@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 
 # Type definitions
@@ -48,6 +49,10 @@ class BoardState:
             f"Moves: {self.moves}\n"
         )
 
+    def clone(self) -> "BoardState":
+        """Create a deep copy of the board state."""
+        return copy.deepcopy(self)
+
 
 def load_input() -> BoardState:
     board = []
@@ -92,7 +97,13 @@ def make_move(board_state: BoardState, direction: str) -> None:
         board_state.cat = (new_x, new_y)
 
     board_state.moves.append(direction)
-    print(board_state)
+
+
+def solve(board_state: BoardState) -> None:
+    # TODO: Implement the actual solving logic
+    for direction in "GPDLDL":
+        make_move(board_state, direction)
+        # print(board_state)
 
 
 def main(debug: bool = False) -> None:
@@ -102,13 +113,14 @@ def main(debug: bool = False) -> None:
         print("Initial board state:")
         print(board_state)
 
-    for direction in "GPDLDL":
-        make_move(board_state, direction)
+    solve(board_state)
 
     if debug:
         print("Final board state:")
         print(board_state)
 
+    print_output(board_state)
+
 
 if __name__ == "__main__":
-    main(debug=True)
+    main(debug=False)
