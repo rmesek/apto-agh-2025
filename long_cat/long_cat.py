@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 # Type definitions
 type Board = list[list[str]]
+type InitBoard = tuple[tuple[str, ...], ...]
 type Position = tuple[int, int]
 
 # Constants for colors
@@ -23,6 +24,22 @@ class BoardState:
     required_snacks: int
     cat: Position
     moves: list[str]
+    _init_board: InitBoard = tuple()
+
+    def __post_init__(self) -> None:
+        """Set the initial board state."""
+        self._init_board = tuple(tuple(row) for row in self.board)
+
+    def __hash__(self) -> int:
+        """Hash function to allow BoardState to be used in sets."""
+        # Use the moves and _init_board for hashing
+        return hash((tuple(self.moves), self._init_board))
+
+    def __eq__(self, other: object) -> bool:
+        """Equality check for BoardState."""
+        if not isinstance(other, BoardState):
+            return NotImplemented
+        return self.moves == other.moves and self._init_board == other._init_board
 
     def __repr__(self) -> str:
         def board_as_str(board: Board, h_spacing: int = 2) -> str:
@@ -80,8 +97,10 @@ def print_output(board_state: BoardState) -> None:
     print("".join(board_state.moves))
 
 
-def make_move(board_state: BoardState, direction: str) -> None:
+def make_move(board_state: BoardState, direction: str) -> bool:
     dx, dy = DIRECTIONS[direction]
+    start_position = board_state.cat
+
     while True:
         new_x = board_state.cat[0] + dx
         new_y = board_state.cat[1] + dy
@@ -96,14 +115,35 @@ def make_move(board_state: BoardState, direction: str) -> None:
         board_state.board[new_y][new_x] = "X"
         board_state.cat = (new_x, new_y)
 
+    if start_position == board_state.cat:
+        return False
+
     board_state.moves.append(direction)
+    return True
 
 
-def solve(board_state: BoardState) -> None:
-    # TODO: Implement the actual solving logic
-    for direction in "GPDLDL":
-        make_move(board_state, direction)
-        # print(board_state)
+def brute_force(
+    board_state: BoardState, found_states: set[BoardState], early_stop: bool = True
+) -> None:
+    if early_stop and board_state.required_snacks == 0:
+        return
+
+    for direction in DIRECTIONS:
+        new_board_state = board_state.clone()
+        if make_move(new_board_state, direction):
+            found_states.add(new_board_state)
+            brute_force(new_board_state, found_states, early_stop)
+
+
+def solve(board_state: BoardState, debug: bool = False) -> set[BoardState]:
+    all_states = {board_state}
+
+    brute_force(board_state, all_states, early_stop=not debug)
+
+    if debug:
+        print(f"Found {len(all_states)} states")
+
+    return {state for state in all_states if state.required_snacks == 0}
 
 
 def main(debug: bool = False) -> None:
@@ -113,13 +153,17 @@ def main(debug: bool = False) -> None:
         print("Initial board state:")
         print(board_state)
 
-    solve(board_state)
+    solutions = solve(board_state, debug=debug)
 
     if debug:
-        print("Final board state:")
-        print(board_state)
+        print(f"Found {len(solutions)} solutions:")
+        for solution in solutions:
+            print(solution)
 
-    print_output(board_state)
+    for solution in solutions:
+        print_output(solution)
+        if not debug:
+            break
 
 
 if __name__ == "__main__":
