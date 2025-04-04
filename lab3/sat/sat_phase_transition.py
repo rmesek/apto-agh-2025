@@ -1,61 +1,66 @@
 import random
-from typing import List
 
 import matplotlib.pyplot as plt
-import numpy as np
+from timeit import default_timer as timer
 import pycosat
 
 
-def get_random_variable(max_var: int) -> int:
-    sign = [1, -1]
-    variable_number = range(1, max_var + 1)
-    var = random.choice(sign) * random.choice(variable_number)
-    return var
-
-
-def get_random_clause(size: int, max_var: int) -> List[int]:
-    clause = [get_random_variable(max_var) for _ in range(size)]
+def generate_random_clause(n, k):
+    """Generate a random clause with k literals from n variables."""
+    clause = []
+    for _ in range(k):
+        variable = random.randint(1, n)  # Choose random variable
+        negation = random.choice([1, -1])  # Randomly negate
+        clause.append(variable * negation)
     return clause
 
 
-def get_random_formula(
-    clause_no: int, clause_size: int, max_var: int
-) -> List[List[int]]:
-    formula = [get_random_clause(clause_size, max_var) for _ in range(clause_no)]
+def generate_random_formula(n, m, k):
+    """Generate a random k-CNF formula with n variables and m clauses."""
+    formula = []
+    for _ in range(m):
+        formula.append(generate_random_clause(n, k))
     return formula
 
 
-def is_satisfiable(formula: List[List[int]]) -> bool:
+def is_satisfiable(formula, n):
     sol = pycosat.solve(formula)
     return sol != "UNSAT"
 
 
-def plot_and_show(x: List[float], y: List[float], k, n, repeats) -> None:
+def plot_results(results, n, k):
+    """Plot the phase transition results."""
+    a_values = [r[0] for r in results]
+    sat_prob = [r[1] for r in results]
+
     plt.figure(figsize=(10, 6))
-    plt.scatter(x, y)
-    plt.title(f"(SAT-{k}CNF), n={n}, T={repeats}")
-    plt.xlabel("a")
-    plt.ylabel("Satisfiability probability")
-    plt.savefig("plot.png")
+    plt.plot(a_values, sat_prob, "o-", linewidth=2)
+    plt.grid(True)
+    plt.xlabel("α (clauses-to-variables ratio)")
+    plt.ylabel("Probability of satisfiability")
+    plt.title(f"Phase Transition in {k}-CNF-SAT (n = {n})")
+    plt.ylim([-0.05, 1.05])
+    plt.savefig(f"phase_transition_k{k}_n{n}.png")
     plt.show()
 
 
-def calc_sat_probs_and_plot(k, n, repeats) -> None:
-    # k = 2  # SAT-kCNF
-    # n = 10  # number of variables: x_1, x_2, ..., x_n
-    # repeats = 100  # average probability for each one
+def run_experiment(n, k, a_values, T):
+    """Run the phase transition experiment."""
+    results = []
 
-    max_var = n
-    sat_prob = []
-    for a in np.arange(1, 10, 0.1):
-        clause_no = int(a * n)
+    for a in a_values:
+        start_time = timer()
         satisfiable_count = 0
-        for _ in range(repeats):
-            formula = get_random_formula(clause_no, k, max_var)
-            satisfiable_count += is_satisfiable(formula)
+        m = int(a * n)  # Number of clauses
 
-        probability = satisfiable_count / repeats
-        sat_prob.append((a, probability))
+        for _ in range(T):
+            formula = generate_random_formula(n, m, k)
+            if is_satisfiable(formula, n):
+                satisfiable_count += 1
 
-    x, y = zip(*sat_prob)
-    plot_and_show(x, y, k, n, repeats)
+        ratio = satisfiable_count / T
+        results.append((a, ratio))
+        elapsed = timer() - start_time
+        print(f"a = {a:.1f}, S/T = {ratio:.2f}, Time: {elapsed:.2f}s")
+
+    return results

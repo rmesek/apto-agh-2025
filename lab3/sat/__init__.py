@@ -1,1 +1,1 @@
-from .sat_phase_transition import calc_sat_probs_and_plot
+from .sat_phase_transition import run_experiment, plot_results
