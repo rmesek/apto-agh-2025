@@ -73,7 +73,7 @@ bool load_input() {
       return false;
     }
     // Remove trailing newline if present
-    board[y][strcspn(board[y], "\n")] = 0;
+    board[y][strcspn(board[y], "\r\n")] = 0;
 
     if ((int)strlen(board[y]) != width) {
       fprintf(stderr, "Error: Row %d length (%zu) does not match width (%d).\n",
