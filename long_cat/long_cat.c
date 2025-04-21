@@ -146,11 +146,6 @@ bool apply_move(char direction, UndoInfo* undo_info) {
     int next_x = cat_pos_global.x + current_dx;
     int next_y = cat_pos_global.y + current_dy;
 
-    // Boundary checks
-    if (next_x < 0 || next_x >= width || next_y < 0 || next_y >= height) {
-      break;  // Hit edge implicitly
-    }
-
     char next_cell = board[next_y][next_x];
 
     // Check for obstacles or already visited path
@@ -184,16 +179,6 @@ bool apply_move(char direction, UndoInfo* undo_info) {
 
   // Check if the cat actually moved
   if (cat_pos_global.x == start_pos.x && cat_pos_global.y == start_pos.y) {
-    // If no move occurred, revert any potential single-step changes (shouldn't
-    // happen with current logic, but safe)
-    for (int i = 0; i < undo_info->change_count; ++i) {
-      Position p = undo_info->changed_cells[i];
-      board[p.y][p.x] = undo_info->original_values[i];
-      if (undo_info->original_values[i] == '*') {
-        required_snacks_global++;  // Add back snack count if reverted
-                                   // immediately
-      }
-    }
     return false;
   }
 
@@ -208,14 +193,7 @@ void undo_move(const UndoInfo* undo_info) {
   // Restore board cells
   for (int i = 0; i < undo_info->change_count; ++i) {
     Position p = undo_info->changed_cells[i];
-    // Boundary check before accessing board (safety)
-    if (p.x >= 0 && p.x < width && p.y >= 0 && p.y < height) {
-      board[p.y][p.x] = undo_info->original_values[i];
-    } else {
-      fprintf(stderr,
-              "Warning: Attempted to undo change outside bounds at (%d, %d).\n",
-              p.x, p.y);
-    }
+    board[p.y][p.x] = undo_info->original_values[i];
   }
 
   // Restore snack count
@@ -232,15 +210,11 @@ void solve() {
   }
 
   // Pruning: If max moves reached (prevents infinite loops/stack overflow)
-  if (moves_count >= MAX_MOVES - 1) {
-    return;
-  }
+  if (moves_count >= MAX_MOVES - 1) return;
 
   // Recursive step: Try all directions
   for (int i = 0; i < 4; ++i) {
     UndoInfo undo_info;
-    Position current_cat_pos =
-        cat_pos_global;  // Store pos before attempting move
 
     if (apply_move(dir_chars[i], &undo_info)) {
       // Move was successful, add to path and recurse
@@ -252,20 +226,8 @@ void solve() {
       moves_count--;  // Remove the move from the path
       undo_move(&undo_info);
 
-      // Ensure cat position is truly restored (belt-and-suspenders)
-      cat_pos_global = current_cat_pos;
-
       // If a solution was found in the recursive call, stop exploring further
-      if (solution_found) {
-        return;
-      }
-
-    } else {
-      // Move was blocked or resulted in no change, ensure state is clean
-      cat_pos_global =
-          current_cat_pos;  // Ensure position reset if apply_move failed early
-      // No need to call undo_move if apply_move returned false, as it should
-      // have self-reverted or made no changes.
+      if (solution_found) return;
     }
   }
 }
