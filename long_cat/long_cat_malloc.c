@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_DIM 24  // Max dimension + 1 for null terminators/boundary checks
+#define MAX_DIM 24     // Max dimension + 1 for null terminators/boundary checks
 #define MAX_MOVES 550  // Max length for the moves sequence (adjust if needed)
 
 // --- Data Structures ---
