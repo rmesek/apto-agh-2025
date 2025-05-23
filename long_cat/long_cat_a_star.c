@@ -328,7 +328,6 @@ void solve_astar() {
   
   pq_insert(open_set, start);
   
-  // Simple visited set (could be optimized with hash table)
   Node* visited[1000];
   int visited_count = 0;
   
