@@ -4,8 +4,8 @@
 #include <string.h>
 #include <limits.h>
 
-#define MAX_DIM 24
-#define MAX_MOVES 550
+#define MAX_DIM 104
+#define MAX_MOVES 1500
 
 // --- Data Structures ---
 
@@ -16,7 +16,6 @@ typedef struct {
 
 // Node for A* search
 typedef struct Node {
-  Position pos;
   Position cat_pos;
   int snacks_remaining;
   int g_cost;  // Actual cost from start
@@ -24,7 +23,6 @@ typedef struct Node {
   int f_cost;  // g_cost + h_cost
   char move_sequence[MAX_MOVES];
   int move_length;
-  char board_state[MAX_DIM][MAX_DIM];
   struct Node* parent;
 } Node;
 
@@ -56,13 +54,14 @@ void destroy_priority_queue(PriorityQueue* pq);
 void pq_insert(PriorityQueue* pq, Node* node);
 Node* pq_extract_min(PriorityQueue* pq);
 bool pq_is_empty(PriorityQueue* pq);
-Node* create_node(Position cat_pos, int snacks_remaining, const char board[MAX_DIM][MAX_DIM], 
-                  const char* moves, int move_length, int g_cost);
+Node* create_node(Position cat_pos, int snacks_remaining, const char* moves, int move_length, int g_cost);
 void destroy_node(Node* node);
-int calculate_heuristic(Position cat_pos, const char board[MAX_DIM][MAX_DIM], int snacks_remaining);
+int calculate_heuristic(Position cat_pos, int snacks_remaining);
 bool apply_move_to_state(char direction, char board[MAX_DIM][MAX_DIM], Position* cat_pos, int* snacks_eaten);
 void copy_board(const char src[MAX_DIM][MAX_DIM], char dest[MAX_DIM][MAX_DIM]);
 bool states_equal(const Node* a, const Node* b);
+void reconstruct_state_from_moves(const char* moves, int move_length, char board[MAX_DIM][MAX_DIM], Position* cat_pos, int* snacks_remaining);
+bool simulate_move_without_modifying(char direction, const char board[MAX_DIM][MAX_DIM], Position cat_pos, Position* new_pos, int* snacks_eaten);
 void solve_astar();
 
 // --- Function Implementations ---
@@ -209,15 +208,14 @@ bool pq_is_empty(PriorityQueue* pq) {
   return pq->size == 0;
 }
 
-Node* create_node(Position cat_pos, int snacks_remaining, const char board[MAX_DIM][MAX_DIM],
-                  const char* moves, int move_length, int g_cost) {
+Node* create_node(Position cat_pos, int snacks_remaining, const char* moves, int move_length, int g_cost) {
   Node* node = malloc(sizeof(Node));
   if (!node) return NULL;
   
   node->cat_pos = cat_pos;
   node->snacks_remaining = snacks_remaining;
   node->g_cost = g_cost;
-  node->h_cost = calculate_heuristic(cat_pos, board, snacks_remaining);
+  node->h_cost = calculate_heuristic(cat_pos, snacks_remaining);
   node->f_cost = node->g_cost + node->h_cost;
   node->move_length = move_length;
   node->parent = NULL;
@@ -227,8 +225,6 @@ Node* create_node(Position cat_pos, int snacks_remaining, const char board[MAX_D
   }
   node->move_sequence[move_length] = '\0';
   
-  copy_board(board, node->board_state);
-  
   return node;
 }
 
@@ -236,22 +232,16 @@ void destroy_node(Node* node) {
   if (node) free(node);
 }
 
-int calculate_heuristic(Position cat_pos, const char board[MAX_DIM][MAX_DIM], int snacks_remaining) {
+int calculate_heuristic(Position cat_pos, int snacks_remaining) {
   if (snacks_remaining == 0) return 0;
   
-  // Find distance to nearest snack (Manhattan distance)
-  int min_dist = INT_MAX;
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      if (board[y][x] == '*') {
-        int dist = abs(cat_pos.x - x) + abs(cat_pos.y - y);
-        if (dist < min_dist) min_dist = dist;
-      }
-    }
-  }
+  // Reconstruct current board state to find snacks
+  char temp_board[MAX_DIM][MAX_DIM];
+  copy_board(initial_board, temp_board);
   
-  // Heuristic: minimum distance to nearest snack + remaining snacks
-  return (min_dist == INT_MAX) ? INT_MAX : min_dist + snacks_remaining - 1;
+  // For heuristic, we use a simple estimate: remaining snacks
+  // This is admissible since we need at least 1 move per snack
+  return snacks_remaining;
 }
 
 bool apply_move_to_state(char direction, char board[MAX_DIM][MAX_DIM], Position* cat_pos, int* snacks_eaten) {
@@ -303,16 +293,64 @@ bool states_equal(const Node* a, const Node* b) {
   if (a->cat_pos.x != b->cat_pos.x || a->cat_pos.y != b->cat_pos.y ||
       a->snacks_remaining != b->snacks_remaining) return false;
   
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      if (a->board_state[y][x] != b->board_state[y][x]) return false;
+  // For efficiency, if move sequences are the same, states are equal
+  if (a->move_length == b->move_length) {
+    return strncmp(a->move_sequence, b->move_sequence, a->move_length) == 0;
+  }
+  
+  return false;
+}
+
+void reconstruct_state_from_moves(const char* moves, int move_length, char board[MAX_DIM][MAX_DIM], Position* cat_pos, int* snacks_remaining) {
+  copy_board(initial_board, board);
+  *cat_pos = initial_cat_pos;
+  *snacks_remaining = required_snacks_global;
+  
+  for (int i = 0; i < move_length; i++) {
+    int snacks_eaten = 0;
+    apply_move_to_state(moves[i], board, cat_pos, &snacks_eaten);
+    *snacks_remaining -= snacks_eaten;
+  }
+}
+
+bool simulate_move_without_modifying(char direction, const char board[MAX_DIM][MAX_DIM], Position cat_pos, Position* new_pos, int* snacks_eaten) {
+  int dir_index = -1;
+  for (int i = 0; i < 4; ++i) {
+    if (dir_chars[i] == direction) {
+      dir_index = i;
+      break;
     }
   }
-  return true;
+  if (dir_index == -1) return false;
+
+  int current_dx = dx[dir_index];
+  int current_dy = dy[dir_index];
+  *new_pos = cat_pos;
+  *snacks_eaten = 0;
+
+  while (true) {
+    int next_x = new_pos->x + current_dx;
+    int next_y = new_pos->y + current_dy;
+
+    if (next_x < 0 || next_x >= width || next_y < 0 || next_y >= height) break;
+
+    char next_cell = board[next_y][next_x];
+
+    if (next_cell == '#' || next_cell == 'O' || next_cell == 'X') break;
+
+    if (next_cell == '*') {
+      (*snacks_eaten)++;
+    }
+
+    new_pos->x = next_x;
+    new_pos->y = next_y;
+  }
+
+  return !(new_pos->x == cat_pos.x && new_pos->y == cat_pos.y);
 }
 
 void solve_astar() {
-  PriorityQueue* open_set = create_priority_queue(10000);
+  PriorityQueue* open_set = create_priority_queue(1000);
   if (!open_set) {
     fprintf(stderr, "Error: Failed to create priority queue.\n");
     return;
@@ -320,7 +358,7 @@ void solve_astar() {
   
   // Create initial node
   Node* start = create_node(initial_cat_pos, required_snacks_global, 
-                           initial_board, "", 0, 0);
+                           "", 0, 0);
   if (!start) {
     destroy_priority_queue(open_set);
     return;
@@ -328,8 +366,13 @@ void solve_astar() {
   
   pq_insert(open_set, start);
   
-  Node* visited[1000];
+  // Use smaller visited list with better pruning
+  Node* visited[50];
   int visited_count = 0;
+  
+  // Reuse these buffers to avoid repeated allocation
+  char work_board[MAX_DIM][MAX_DIM];
+  char temp_moves[MAX_MOVES];
   
   while (!pq_is_empty(open_set)) {
     Node* current = pq_extract_min(open_set);
@@ -342,9 +385,9 @@ void solve_astar() {
       break;
     }
     
-    // Check if already visited
+    // Check if already visited (limit checks to save time)
     bool already_visited = false;
-    for (int i = 0; i < visited_count; i++) {
+    for (int i = 0; i < visited_count && i < 50; i++) {
       if (states_equal(current, visited[i])) {
         already_visited = true;
         break;
@@ -356,9 +399,16 @@ void solve_astar() {
       continue;
     }
     
-    // Add to visited
-    if (visited_count < 1000) {
+    // Add to visited (replace oldest if full)
+    if (visited_count < 50) {
       visited[visited_count++] = current;
+    } else {
+      destroy_node(visited[0]);
+      // Shift array
+      for (int i = 0; i < 49; i++) {
+        visited[i] = visited[i + 1];
+      }
+      visited[49] = current;
     }
     
     // Pruning: stop if too many moves
@@ -366,28 +416,34 @@ void solve_astar() {
       continue;
     }
     
-    // Generate successors
+    // Reconstruct current state once
+    Position current_cat_pos;
+    int current_snacks_remaining;
+    reconstruct_state_from_moves(current->move_sequence, current->move_length, 
+                                work_board, &current_cat_pos, &current_snacks_remaining);
+    
+    // Generate successors using simulation to avoid board copying
     for (int i = 0; i < 4; i++) {
-      char new_board[MAX_DIM][MAX_DIM];
-      copy_board(current->board_state, new_board);
-      
-      Position new_cat_pos = current->cat_pos;
+      Position new_cat_pos;
       int snacks_eaten = 0;
       
-      if (apply_move_to_state(dir_chars[i], new_board, &new_cat_pos, &snacks_eaten)) {
-        char new_moves[MAX_MOVES];
-        strcpy(new_moves, current->move_sequence);
-        new_moves[current->move_length] = dir_chars[i];
-        new_moves[current->move_length + 1] = '\0';
-        
-        int new_snacks_remaining = current->snacks_remaining - snacks_eaten;
-        int new_g_cost = current->g_cost + 1;
-        
-        Node* successor = create_node(new_cat_pos, new_snacks_remaining, new_board,
-                                     new_moves, current->move_length + 1, new_g_cost);
-        
-        if (successor) {
-          pq_insert(open_set, successor);
+      // Simulate move without modifying the board
+      if (simulate_move_without_modifying(dir_chars[i], work_board, current_cat_pos, &new_cat_pos, &snacks_eaten)) {
+        // Build move sequence directly in temp buffer
+        if (current->move_length < MAX_MOVES - 1) {
+          memcpy(temp_moves, current->move_sequence, current->move_length);
+          temp_moves[current->move_length] = dir_chars[i];
+          temp_moves[current->move_length + 1] = '\0';
+          
+          int new_snacks_remaining = current->snacks_remaining - snacks_eaten;
+          int new_g_cost = current->g_cost + 1;
+          
+          Node* successor = create_node(new_cat_pos, new_snacks_remaining,
+                                       temp_moves, current->move_length + 1, new_g_cost);
+          
+          if (successor) {
+            pq_insert(open_set, successor);
+          }
         }
       }
     }
