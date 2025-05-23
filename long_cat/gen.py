@@ -59,7 +59,7 @@ def generate_board(width, height):
     # replace '.' with walls '#' to ensure all spaces are filled
     for y in range(height):
         for x in range(width):
-            if board[y][x] == ".":
+            if board[y][x] == ".":  # and random.random() < 0.5:
                 board[y][x] = "#"
     return board, snack_count
 
@@ -80,8 +80,12 @@ def main():
     try:
         width = int(sys.argv[1])
         height = int(sys.argv[2])
-        board, snack_count = generate_board(width, height)
-        print_board(board, snack_count)
+        max_snack_count = 0
+        while True:
+            board, snack_count = generate_board(width, height)
+            if max_snack_count < snack_count:
+                max_snack_count = snack_count
+                print_board(board, snack_count)
 
     except ValueError as e:
         print(f"Error: {e}")
